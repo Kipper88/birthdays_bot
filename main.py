@@ -18,6 +18,17 @@ from utils import requestRuk, birthdays_workers, is_admin
 from cfg import field, keyboard_gift
 from kb_pull import router
 
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,  # Уровень логирования (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Формат вывода логов
+    datefmt='%Y-%m-%d %H:%M:%S',  # Формат даты и времени
+    handlers=[
+        logging.FileHandler('log/script.log', mode='a')  # Вывод логов в файл 'app.log'
+    ]
+)
+
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -29,77 +40,86 @@ dp = Dispatcher(storage=MemoryStorage())
 dp.include_router(router)
 
 async def while_check_birthdays():
-    resp = await requestRuk(RUK_TOKEN)
-    
-    today = datetime.today().date()
-        
-    workers = [(x[field['telegram']], x[field['birthday']], x[field['name']], x[field['surname']], x[field['experience']], x[field['position']], x[field['status']], x[field['annualwork']]) for x in resp['data']]
-        
-    birthdays = []
-    tech_tg = []
-    annualworks = []
-    for x in workers:
-        if x[1] and x[1].strip() != '' and x[7] and x[7].strip() != '':
-            birth_date = datetime.strptime(x[1], '%d.%m.%Y').date()
-            today = datetime.today().date()
-            birth_date_this_year = birth_date.replace(year=today.year)
+    try:
+        while True:
+            try:
+                resp = await requestRuk(RUK_TOKEN)
+                break
+            except:
+                continue
             
-            annualwork_date = datetime.strptime(x[7], '%d.%m.%Y').date()
-            annualwork_date_this_year = annualwork_date.replace(year=today.year)
-
-            if birth_date_this_year < today:
-                birth_date_this_year = birth_date.replace(year=today.year + 1)
-            if annualwork_date_this_year < today:
-                annualwork_date_this_year = annualwork_date_this_year.replace(year=today.year + 1)
-
-            days_difference = (birth_date_this_year - today).days
-            days_difference_annualwork = (annualwork_date_this_year - today).days
-            if x[6] != 'Уволен':
-                if days_difference == 7:
-                    birthdays.append(f"- {birth_date_this_year}: {x[2]} {x[3]}, {x[5]}, стаж {x[4]} (лет)")
-                if days_difference == 3:    
-                    tech_tg.append((x[0].split('/')[-1], int(x[4]), x[2], x[3]))
-                if days_difference_annualwork == 7:
-                    annualworks.append(f"- {annualwork_date_this_year}: {x[2]} {x[3]}, {x[5]}, стаж {x[4]} (лет)")
-    
-    if len(birthdays) > 0:
-        text = f'🎉 Напоминание!\nЧерез 7 дней ({today + timedelta(days=7)}) празднует(-ют) день рождения:\n'
-            
-        for i in birthdays:
-            text += f'{i}\n'
-        with open('db.json', 'r', encoding='utf-8') as f:
-            js = json.load(f)
         
-        for i in js['admins'].items(): 
-            await bot.send_message(i[1]['id'], text)
-            await asyncio.sleep(3)
-       
-    if len(tech_tg) > 0: 
-        with open('db.json', 'r', encoding='utf-8') as f:
-            f = f.read()
-            js = json.loads(f)
-        for i in tech_tg:
-            if i[0] in js['users']:   
-                if i[1] < 1:
-                    inline_kb = keyboard_gift['<1']    
-                if i[1] in [1,2,3]:
-                    inline_kb = keyboard_gift['1-3']   
-                if i[1] > 3:
-                    inline_kb = keyboard_gift['>3']
-                await bot.send_message(js['users'][i[0]]["id"], f'С наступающим днём рождения, {i[2]} {i[3]}!\nВыберите свой подарок, нажав на кнопку', reply_markup=inline_kb)
+        today = datetime.today().date()
+            
+        workers = [(x[field['telegram']], x[field['birthday']], x[field['name']], x[field['surname']], x[field['experience']], x[field['position']], x[field['status']], x[field['annualwork']]) for x in resp['data']]
+            
+        birthdays = []
+        tech_tg = []
+        annualworks = []
+        for x in workers:
+            if x[1] and x[1].strip() != '' and x[7] and x[7].strip() != '':
+                birth_date = datetime.strptime(x[1], '%d.%m.%Y').date()
+                today = datetime.today().date()
+                birth_date_this_year = birth_date.replace(year=today.year)
+                
+                annualwork_date = datetime.strptime(x[7], '%d.%m.%Y').date()
+                annualwork_date_this_year = annualwork_date.replace(year=today.year)
+
+                if birth_date_this_year < today:
+                    birth_date_this_year = birth_date.replace(year=today.year + 1)
+                if annualwork_date_this_year < today:
+                    annualwork_date_this_year = annualwork_date_this_year.replace(year=today.year + 1)
+
+                days_difference = (birth_date_this_year - today).days
+                days_difference_annualwork = (annualwork_date_this_year - today).days
+                if x[6] != 'Уволен':
+                    if days_difference == 7:
+                        birthdays.append(f"- {birth_date_this_year}: {x[2]} {x[3]}, {x[5]}, стаж {x[4]} (лет)")
+                    if days_difference == 7:    
+                        tech_tg.append((x[0].split('/')[-1], int(x[4]), x[2], x[3]))
+                    if days_difference_annualwork == 7:
+                        annualworks.append(f"- {annualwork_date_this_year}: {x[2]} {x[3]}, {x[5]}, стаж {x[4]} (лет)")
+        
+        if len(birthdays) > 0:
+            text = f'🎉 Напоминание!\nЧерез 7 дней ({today + timedelta(days=7)}) празднует(-ют) день рождения:\n'
+                
+            for i in birthdays:
+                text += f'{i}\n'
+            with open('db.json', 'r', encoding='utf-8') as f:
+                js = json.load(f)
+            
+            for i in js['admins'].items(): 
+                await bot.send_message(i[1]['id'], text)
                 await asyncio.sleep(3)
-
-    if len(annualworks) > 0:
-        text = f'🎉 Напоминание!\nЧерез 7 дней ({today + timedelta(days=7)}) празднует(-ют) годовщину принятия на работу:\n'
-            
-        for i in birthdays:
-            text += f'{i}\n'
-        with open('db.json', 'r', encoding='utf-8') as f:
-            js = json.load(f)
         
-        for i in js['admins'].items(): 
-            await bot.send_message(i[1]['id'], text) 
-            await asyncio.sleep(3)
+        if len(tech_tg) > 0: 
+            with open('db.json', 'r', encoding='utf-8') as f:
+                f = f.read()
+                js = json.loads(f)
+            for i in tech_tg:
+                if i[0] in js['users']:   
+                    if i[1] < 1:
+                        inline_kb = keyboard_gift['<1']    
+                    if i[1] in [1,2,3]:
+                        inline_kb = keyboard_gift['1-3']   
+                    if i[1] > 3:
+                        inline_kb = keyboard_gift['>3']
+                    await bot.send_message(js['users'][i[0]]["id"], f'С наступающим днём рождения, {i[2]} {i[3]}!\nВыберите свой подарок, нажав на кнопку', reply_markup=inline_kb)
+                    await asyncio.sleep(3)
+
+        if len(annualworks) > 0:
+            text = f'🎉 Напоминание!\nЧерез 7 дней ({today + timedelta(days=7)}) празднует(-ют) годовщину принятия на работу:\n'
+                
+            for i in birthdays:
+                text += f'{i}\n'
+            with open('db.json', 'r', encoding='utf-8') as f:
+                js = json.load(f)
+            
+            for i in js['admins'].items(): 
+                await bot.send_message(i[1]['id'], text) 
+                await asyncio.sleep(3)
+    except Exception as err:
+        logging.error()
         
             
             

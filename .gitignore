@@ -2,3 +2,4 @@
 .env
 __pycache__
 bot_birthdays.code-workspace
+db.json
