@@ -119,7 +119,7 @@ async def while_check_birthdays():
                 await bot.send_message(i[1]['id'], text) 
                 await asyncio.sleep(3)
     except Exception as err:
-        logging.error()
+        logging.error(err, exc_info=True)
         
             
             
