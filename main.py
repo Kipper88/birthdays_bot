@@ -14,9 +14,10 @@ import json
 import os
 import re
 
-from utils import requestRuk, birthdays_workers, is_admin
+from utils import requestRuk, is_admin
 from cfg import field, keyboard_gift
 from kb_pull import router
+from db_query import *
 
 import logging
 
@@ -26,7 +27,8 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S',  # Формат даты и времени
     handlers=[
         logging.FileHandler('log/script.log', mode='a')  # Вывод логов в файл 'app.log'
-    ]
+    ],
+    encoding='utf-8'
 )
 
 load_dotenv()
@@ -46,7 +48,7 @@ async def while_check_birthdays():
                 resp = await requestRuk(RUK_TOKEN)
                 break
             except:
-                continue
+                await asyncio.sleep(10)
             
         
         today = datetime.today().date()
@@ -85,26 +87,33 @@ async def while_check_birthdays():
                 
             for i in birthdays:
                 text += f'{i}\n'
-            with open('db.json', 'r', encoding='utf-8') as f:
-                js = json.load(f)
+            js = await get_db_json()
             
             for i in js['admins'].items(): 
-                await bot.send_message(i[1]['id'], text)
-                await asyncio.sleep(3)
+                try:
+                    await bot.send_message(i[1]['id'], text)
+                    await asyncio.sleep(3)
+                except Exception as err:
+                    logging.error(f'{str(err)}\n{i}', exc_info=True)
+                    await asyncio.sleep(3)
         
         if len(tech_tg) > 0: 
-            with open('db.json', 'r', encoding='utf-8') as f:
-                f = f.read()
-                js = json.loads(f)
+            js = await get_db_json()
+    
             for i in tech_tg:
-                if i[0] in js['users']:   
-                    if i[1] < 1:
-                        inline_kb = keyboard_gift['<1']    
-                    if i[1] in [1,2,3]:
-                        inline_kb = keyboard_gift['1-3']   
-                    if i[1] > 3:
-                        inline_kb = keyboard_gift['>3']
-                    await bot.send_message(js['users'][i[0]]["id"], f'С наступающим днём рождения, {i[2]} {i[3]}!\nВыберите свой подарок, нажав на кнопку', reply_markup=inline_kb)
+                try:
+                    if i[0] in js['users']:   
+                        if i[1] < 1:
+                            inline_kb = keyboard_gift['<1']    
+                        elif i[1] in [1,2,3]:
+                            inline_kb = keyboard_gift['1-3']   
+                        elif i[1] > 3:
+                            inline_kb = keyboard_gift['>3']
+
+                        await bot.send_message(js['users'][i[0]]["id"], f'С наступающим днём рождения, {i[2]} {i[3]}!\nВыберите свой подарок, нажав на кнопку', reply_markup=inline_kb)
+                        await asyncio.sleep(3)
+                except Exception as err:
+                    logging.error(f'{str(err)}\n{js["users"][i[0]]}', exc_info=True)
                     await asyncio.sleep(3)
 
         if len(annualworks) > 0:
@@ -112,12 +121,15 @@ async def while_check_birthdays():
                 
             for i in birthdays:
                 text += f'{i}\n'
-            with open('db.json', 'r', encoding='utf-8') as f:
-                js = json.load(f)
+            js = await get_db_json()
             
             for i in js['admins'].items(): 
-                await bot.send_message(i[1]['id'], text) 
-                await asyncio.sleep(3)
+                try:
+                    await bot.send_message(i[1]['id'], text) 
+                    await asyncio.sleep(3)
+                except Exception as err:
+                    logging.error(f'{str(err)}\n{i[1]}', exc_info=True)
+                    await asyncio.sleep(3)
     except Exception as err:
         logging.error(err, exc_info=True)
         
@@ -209,16 +221,13 @@ async def setuser(msg: Message):
         username = str(username)
         userid = int(userid)
         
-        with open('db.json', 'r', encoding='utf-8') as f:
-            f = f.read()
-            js = json.loads(f)
+        js = await get_db_json()
             
         js['admins'][username] = {
             "id": userid
         }
         
-        with open('db.json', 'w', encoding='utf-8') as f:
-            json.dump(js, f, ensure_ascii=False)
+        js = await insert_db_json(js)
         
         await msg.reply('Админ успешно добавлен')
         
@@ -236,17 +245,14 @@ async def deleteadmin(msg: Message):
     if match:
         username = match.group(1)
     
-    with open('db.json', 'r', encoding='utf-8') as f:
-            f = f.read()
-            js = json.loads(f)
+    js = await get_db_json()
     
     try:
         username = str(username)
         
         del js['admins'][username]
         
-        with open('db.json', 'w', encoding='utf-8') as f:
-            json.dump(js, f, ensure_ascii=False)
+        js = await insert_db_json(js)
         
         await msg.reply('Админ успешно удален')
     except Exception:
@@ -258,8 +264,7 @@ async def showadmins(msg: Message):
         return
     
         
-    with open('db.json', 'r', encoding='utf-8') as f:
-        js = json.load(f)
+    js = await get_db_json()
             
     text = ''
     for x in js['admins']:
@@ -274,8 +279,7 @@ async def showadmins(msg: Message):
     
 @dp.message(CommandStart())
 async def start(msg: Message):
-    with open('db.json', 'r', encoding='utf-8') as f:
-        js = json.load(f)
+    js = await get_db_json()
         
     resp = await requestRuk(RUK_TOKEN)
     
@@ -288,8 +292,7 @@ async def start(msg: Message):
                     "id": msg.from_user.id,
                     "is_admin": False
                 }
-                with open('db.json', 'w', encoding='utf-8') as f:
-                    js = json.dump(js, f, indent=4)
+                js = await get_db_json()
                     
                 await msg.reply('Вы были зарегистрированы! ✅')
             else:
@@ -308,7 +311,7 @@ async def check_schedule():
 
     scheduler.add_job(
         while_check_birthdays, 
-        trigger=CronTrigger(hour=10),
+        trigger=CronTrigger(hour=4, minute=33),
         id="check_birthdays",
         replace_existing=True,
     )
