@@ -1,8 +1,7 @@
 from aiohttp import ClientSession
 from cfg import field, keyboard_gift
 
-import json
-
+from db_query import get_db
 from datetime import date, datetime
 async def requestRuk(apiKey):  
     params = {
@@ -64,11 +63,10 @@ async def find_button_name(callback_id: str) -> str:
                 if button.callback_data == callback_id:
                     return button.text
                 
-async def is_admin(username, userid) -> bool:
-    with open('db.json', 'r', encoding='utf-8') as f:
-        js = json.load(f)
+async def is_admin(username) -> bool:
+    data = await get_db()
     try:
-        if js['admins'][username]:
+        if data['users'][username]['is_admin']:
             return True
     except:    
         return False

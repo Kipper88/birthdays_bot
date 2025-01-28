@@ -17,12 +17,12 @@ import re
 from utils import requestRuk, is_admin
 from cfg import field, keyboard_gift
 from kb_pull import router
-from db_query import *
+from db_query import get_db, insert_db, delete_record
 
 import logging
 
 logging.basicConfig(
-    level=logging.DEBUG,  # Уровень логирования (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    level=logging.WARNING,  # Уровень логирования (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Формат вывода логов
     datefmt='%Y-%m-%d %H:%M:%S',  # Формат даты и времени
     handlers=[
@@ -87,18 +87,19 @@ async def while_check_birthdays():
                 
             for i in birthdays:
                 text += f'{i}\n'
-            js = await get_db_json()
+            js = await get_db()
             
-            for i in js['admins'].items(): 
-                try:
-                    await bot.send_message(i[1]['id'], text)
-                    await asyncio.sleep(3)
-                except Exception as err:
-                    logging.error(f'{str(err)}\n{i}', exc_info=True)
-                    await asyncio.sleep(3)
+            for i in js['users'].items(): 
+                if i[1]['is_admin']:
+                    try:
+                        await bot.send_message(i[1]['id'], text)
+                        await asyncio.sleep(3)
+                    except Exception as err:
+                        logging.error(f'{str(err)}\n{i}', exc_info=True)
+                        await asyncio.sleep(3)
         
         if len(tech_tg) > 0: 
-            js = await get_db_json()
+            js = await get_db()
     
             for i in tech_tg:
                 try:
@@ -119,17 +120,18 @@ async def while_check_birthdays():
         if len(annualworks) > 0:
             text = f'🎉 Напоминание!\nЧерез 7 дней ({today + timedelta(days=7)}) празднует(-ют) годовщину принятия на работу:\n'
                 
-            for i in birthdays:
+            for i in annualworks:
                 text += f'{i}\n'
-            js = await get_db_json()
+            js = await get_db()
             
-            for i in js['admins'].items(): 
-                try:
-                    await bot.send_message(i[1]['id'], text) 
-                    await asyncio.sleep(3)
-                except Exception as err:
-                    logging.error(f'{str(err)}\n{i[1]}', exc_info=True)
-                    await asyncio.sleep(3)
+            for i in js['users'].items(): 
+                if i[1]['is_admin']:
+                    try:
+                        await bot.send_message(i[1]['id'], text) 
+                        await asyncio.sleep(3)
+                    except Exception as err:
+                        logging.error(f'{str(err)}\n{i[1]}', exc_info=True)
+                        await asyncio.sleep(3)
     except Exception as err:
         logging.error(err, exc_info=True)
         
@@ -137,7 +139,7 @@ async def while_check_birthdays():
             
 @dp.message(Command("birthdays"))
 async def birthday(msg: Message):
-    if not await is_admin(msg.from_user.username, msg.from_user.id):
+    if not await is_admin(msg.from_user.username):
         return
     
     resp = await requestRuk(RUK_TOKEN)
@@ -170,8 +172,8 @@ async def birthday(msg: Message):
     
     
 @dp.message(Command('annualwork'))
-async def lalala(msg):
-    if not await is_admin(msg.from_user.username, msg.from_user.id):
+async def lalala(msg: Message):
+    if not await is_admin(msg.from_user.username):
         return
     
     resp = await requestRuk(RUK_TOKEN)
@@ -206,7 +208,7 @@ async def lalala(msg):
         
 @dp.message(Command('setadmin'))
 async def setuser(msg: Message):
-    if not await is_admin(msg.from_user.username, msg.from_user.id):
+    if not await is_admin(msg.from_user.username):
         return
     pattern = r"/setadmin\s+(\w+)\s+(\d+)"
     match = re.search(pattern, msg.text)
@@ -220,14 +222,11 @@ async def setuser(msg: Message):
     try:
         username = str(username)
         userid = int(userid)
-        
-        js = await get_db_json()
-            
-        js['admins'][username] = {
-            "id": userid
-        }
-        
-        js = await insert_db_json(js)
+        js = await get_db()
+        if js['users'][username]['is_admin']:
+            await insert_db(username=username,
+                            userid=userid,
+                            isadmin=1)
         
         await msg.reply('Админ успешно добавлен')
         
@@ -237,7 +236,7 @@ async def setuser(msg: Message):
         
 @dp.message(Command('deleteadmin'))
 async def deleteadmin(msg: Message):
-    if not await is_admin(msg.from_user.username, msg.from_user.id):
+    if not await is_admin(msg.from_user.username):
         return
     
     pattern = r"/deleteadmin\s+(\w+)"
@@ -245,14 +244,13 @@ async def deleteadmin(msg: Message):
     if match:
         username = match.group(1)
     
-    js = await get_db_json()
-    
     try:
+        js = await get_db()
+        if username not in js:
+            raise
         username = str(username)
         
-        del js['admins'][username]
-        
-        js = await insert_db_json(js)
+        await delete_record(username)
         
         await msg.reply('Админ успешно удален')
     except Exception:
@@ -260,15 +258,16 @@ async def deleteadmin(msg: Message):
         
 @dp.message(Command('showadmins'))
 async def showadmins(msg: Message):
-    if not await is_admin(msg.from_user.username, msg.from_user.id):
+    if not await is_admin(msg.from_user.username):
         return
     
         
-    js = await get_db_json()
+    js = await get_db()
             
     text = ''
-    for x in js['admins']:
-        text += f"\nusername: {x}\n\tuserid: {js['admins'][x]['id']}\n"
+    for x in js['users']:
+        if js['users'][x]['is_admin']:
+            text += f"\nusername: {x}\n\tuserid: {js['users'][x]['id']}\n"
                 
     # for x in js['admins']:
     #     for j in workers:
@@ -279,7 +278,7 @@ async def showadmins(msg: Message):
     
 @dp.message(CommandStart())
 async def start(msg: Message):
-    js = await get_db_json()
+    js = await get_db()
         
     resp = await requestRuk(RUK_TOKEN)
     
@@ -288,12 +287,11 @@ async def start(msg: Message):
     for i in workers:
         if msg.from_user.username == i[0].split('/')[-1]:
             if msg.from_user.username not in js['users']:
-                js['users'][msg.from_user.username] = {
-                    "id": msg.from_user.id,
-                    "is_admin": False
-                }
-                js = await get_db_json()
-                    
+                await insert_db(
+                    username=msg.from_user.username,
+                    userid=msg.from_user.id,
+                    isadmin=0
+                )    
                 await msg.reply('Вы были зарегистрированы! ✅')
             else:
                 await msg.reply('Вы уже зарегистрированы! ❌')
@@ -302,21 +300,22 @@ async def start(msg: Message):
     await msg.reply('Вас нет в базе данных CRM (возможно нет только Telegram аккаунта) ❌')
     
 async def main():
-    asyncio.create_task(check_schedule())
+    #asyncio.create_task(check_schedule())
+    await while_check_birthdays()
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
-async def check_schedule():
-    scheduler = AsyncIOScheduler()
+# async def check_schedule():
+#     scheduler = AsyncIOScheduler()
 
-    scheduler.add_job(
-        while_check_birthdays, 
-        trigger=CronTrigger(hour=4, minute=33),
-        id="check_birthdays",
-        replace_existing=True,
-    )
+#     scheduler.add_job(
+#         while_check_birthdays, 
+#         trigger=CronTrigger(hour=10, minute=00),
+#         id="check_birthdays",
+#         replace_existing=True,
+#     )
 
-    scheduler.start()
+#     scheduler.start()
         
         
 if __name__ == "__main__":
