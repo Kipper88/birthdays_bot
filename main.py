@@ -300,22 +300,22 @@ async def start(msg: Message):
     await msg.reply('Вас нет в базе данных CRM (возможно нет только Telegram аккаунта) ❌')
     
 async def main():
-    #asyncio.create_task(check_schedule())
+    asyncio.create_task(check_schedule())
     await while_check_birthdays()
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
-# async def check_schedule():
-#     scheduler = AsyncIOScheduler()
+async def check_schedule():
+    scheduler = AsyncIOScheduler()
 
-#     scheduler.add_job(
-#         while_check_birthdays, 
-#         trigger=CronTrigger(hour=10, minute=00),
-#         id="check_birthdays",
-#         replace_existing=True,
-#     )
+    scheduler.add_job(
+        while_check_birthdays, 
+        trigger=CronTrigger(hour=10, minute=00),
+        id="check_birthdays",
+        replace_existing=True,
+    )
 
-#     scheduler.start()
+    scheduler.start()
         
         
 if __name__ == "__main__":
